@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#020814">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles/app.css">
+  <title>Step 2 · Liveness</title>
+</head>
+<body>
+  <div class="page">
+    <div class="shell">
+      <header class="hero">
+        <p class="eyebrow">Step 2 · Liveness</p>
+        <h1>Center, then turn your head left and right</h1>
+        <p class="lede">Follow each prompt and hold steady — we'll capture automatically once you're settled.</p>
+      </header>
+
+      <section class="capture-block">
+        <div class="capture-frame portrait mirror-feed">
+          <video id="vid-face" autoplay playsinline muted></video>
+          <canvas id="overlay-face"></canvas>
+          <div class="countdown" id="countdown-face">2</div>
+          <div class="quality-toast" id="face-toast">Look straight at the camera.</div>
+        </div>
+
+        <div class="challenge-panel">
+          <h3>Challenge queue</h3>
+          <p id="challenge-instr">Face your camera — detection starts automatically.</p>
+          <div class="challenge-list" id="challenge-list"></div>
+          <div class="progress-bar"><span id="challenge-progress"></span></div>
+          <div class="liveness-meta">Once all prompts glow green we capture and submit.</div>
+        </div>
+      </section>
+
+      <section class="preview-row" id="face-preview-block" hidden>
+        <div class="preview-frames">
+          <img id="face-preview" alt="Liveness preview">
+          <div class="preview-strip" id="face-preview-strip"></div>
+        </div>
+        <div class="preview-meta">
+          <p class="preview-title">Capture log</p>
+          <ul id="challenge-summary"></ul>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button class="ghost" id="restart-btn">Restart Liveness</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim" id="model-loading">
+    <div class="loader"></div>
+    <p>Loading face model (2.8&nbsp;MB)…</p>
+  </div>
+
+  <div class="scrim hidden" id="submitting-layer" style="flex-direction:column;gap:1rem">
+    <div class="loader"></div>
+    <p style="font-size:1rem;font-weight:600;margin:0">Uploading your details…</p>
+    <p style="font-size:0.85rem;opacity:0.6;margin:0">This will only take a few seconds.</p>
+  </div>
+
+  <div class="scrim hidden" id="done-layer" style="flex-direction:column;gap:0.75rem;padding:2rem;text-align:center">
+    <div style="font-size:3rem;line-height:1">✓</div>
+    <p style="font-size:1.2rem;font-weight:700;margin:0;letter-spacing:0.03em">Verification submitted.</p>
+    <p style="font-size:0.85rem;opacity:0.65;margin:0">We're reviewing your details now — you'll be notified once it's complete.</p>
+    <p style="font-size:0.8rem;opacity:0.45;margin:0.75rem 0 0">You can close this tab.</p>
+  </div>
+
+  <script>window.LIVENESS_ENDPOINT = '/save';</script>
+  <script>
+    window.VERIFY_API_URL = '/verify';
+  </script>
+  <script type="module" src="scripts/liveness.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

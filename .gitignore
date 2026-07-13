@@ -1,0 +1,19 @@
+# Local dev TLS certs (auto-generated)
+_cert.pem
+_key.pem
+
+# Captured sessions (ephemeral, real PII — never commit)
+captures/
+
+# MediaPipe source tarball (already built into liveness/)
+mediapipe-tasks-vision-*.tgz
+
+# Server log files
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Claude Code session files
+.claude/

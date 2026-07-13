@@ -1,0 +1,11 @@
+# Web client + proxy server (development/web)
+
+- Purpose: browser capture experience (country/document selection, ID capture, liveness) plus a lightweight Python server that saves captures locally and proxies verification to the EC2 API.
+- App flow (live UI): `index.html` (choose country + doc type) → `id-capture.html` (camera/upload for ID front/back with quality heuristics) → `liveness.html` (two head-turn prompts; captures up to 5 frames). State stored in `sessionStorage` (`kyc-flow-v2` via `scripts/state.js`). Result screen is always “submitted”; verdict is notified via Telegram server-side.
+- Legacy tools: `pipeline.html`/`scripts/pipeline.js` are older single-page liveness flow; `handoff.html`/`handoff.js` is a review/payload emitter page; neither is linked from the main flow but remains cached by `sw.js`.
+- Scripts:
+  - `scripts/id.js` country/doc selection with search UI; `id-capture.js` handles camera quality metrics (focus/light/glare/align), countdown capture, uploads, and saves previews/back side; `liveness.js` runs MediaPipe Face Landmarker, drives challenges, builds `capture_pack`, posts `/save` (fire-and-forget) and `/verify` (multipart) via `sendToVerify`.
+  - `scripts/state.js` manages session storage and payload assembly; `handoff.js` renders payload and emits it via `window.KYC_ENDPOINT`; `pipeline.js` is the earlier liveness loop with queued captures and lighting gates.
+- Server: `server.py` (http.server) serves static files with correct WASM MIME types, implements `/save` (writes `captures/{ts}_*.jpg` + meta JSON, forwards summary/photos to Telegram) and `/verify` (threads proxy to `EC2_VERIFY_URL`, adds `X-Api-Key`). Uses env `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `EC2_VERIFY_URL`, `EC2_API_KEY`. `start.bat`/`start.md` describe launching locally; `requirements.txt` lists server/ML deps if running standalone.
+- Docs: `API_FLOW.md` clarifies split deployment (this server proxies to remote EC2) and request contract; `CAPTURE_SYSTEM.md` details current liveness capture cadence and saved payload shape. `send_to_api.py` replays latest capture pack directly to `/api/v1/verify` for debugging.
+- Assets: PWA manifest/service worker (`manifest.json`, `sw.js`), styles under `styles/`, MediaPipe assets under `liveness/`, sample captures in `captures/`.
