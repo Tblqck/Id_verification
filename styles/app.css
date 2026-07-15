@@ -24,19 +24,20 @@
 }
 
 :root {
-  --bg: #020814;
-  --bg-soft: #060f1f;
-  --surface: rgba(9, 13, 27, 0.82);
-  --surface-strong: rgba(4, 7, 18, 0.92);
-  --border: rgba(255, 255, 255, 0.09);
-  --text: #f8fbff;
-  --muted: rgba(255, 255, 255, 0.68);
-  --accent: #6ef6ff;
-  --accent-2: #7c5dff;
+  /* Matches admin/detail.html's near-black / blue-accent theme (admin.css --a-*). */
+  --bg: #0a0e14;
+  --bg-soft: #0d1219;
+  --surface: rgba(16, 21, 31, 0.82);
+  --surface-strong: rgba(13, 18, 25, 0.92);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #e7ecf5;
+  --muted: rgba(231, 236, 245, 0.55);
+  --accent: #3b82f6;
+  --accent-2: #60a5fa;
   --success: #5cfa8e;
   --warning: #ffbd59;
   --danger: #ff5575;
-  --shadow: rgba(2, 8, 20, 0.6);
+  --shadow: rgba(2, 5, 10, 0.6);
 }
 
 * {
@@ -50,9 +51,9 @@ html, body {
 body {
   margin: 0;
   font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
-  background: radial-gradient(circle at 20% 20%, rgba(42, 88, 255, 0.12), transparent 55%),
-    radial-gradient(circle at 80% 0%, rgba(97, 244, 255, 0.12), transparent 45%),
-    linear-gradient(180deg, #030710, #00040b 68%, #010206);
+  background: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.12), transparent 55%),
+    radial-gradient(circle at 80% 0%, rgba(96, 165, 250, 0.12), transparent 45%),
+    linear-gradient(180deg, #05070c, #030509 68%, #020304);
   color: var(--text);
   min-height: 100vh;
   overflow-x: hidden;
@@ -350,13 +351,13 @@ button.link {
 }
 
 .challenge-item.active {
-  border-color: rgba(110, 246, 255, 0.6);
+  border-color: rgba(59, 130, 246, 0.6);
   color: var(--text);
 }
 
 .challenge-item.active::before {
   background: var(--accent);
-  box-shadow: 0 0 18px rgba(110, 246, 255, 0.8);
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.8);
 }
 
 .challenge-item.done {
@@ -578,7 +579,7 @@ button.link {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  border: 3px solid rgba(110, 246, 255, 0.2);
+  border: 3px solid rgba(59, 130, 246, 0.2);
   border-top-color: var(--accent);
   animation: spin 0.85s linear infinite;
 }
@@ -659,8 +660,8 @@ button.link {
 .country-input::-webkit-search-cancel-button { display: none; }
 
 .country-input:focus {
-  border-color: rgba(110, 246, 255, 0.55);
-  box-shadow: 0 0 0 3px rgba(110, 246, 255, 0.08);
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
 }
 
 .country-list {
@@ -697,7 +698,7 @@ button.link {
 
 .country-item:hover,
 .country-item.hovered {
-  background: rgba(110, 246, 255, 0.1);
+  background: rgba(59, 130, 246, 0.1);
   color: var(--text);
 }
 
@@ -784,8 +785,8 @@ button.link {
 }
 
 .doc-type-card:hover {
-  border-color: rgba(110, 246, 255, 0.4);
-  background: rgba(110, 246, 255, 0.05);
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.05);
   color: var(--text);
   transform: translateY(-2px);
 }
@@ -846,8 +847,8 @@ button.link {
   gap: 8px;
   padding: 7px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(110, 246, 255, 0.3);
-  background: rgba(110, 246, 255, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.06);
   font-size: 0.9rem;
   color: var(--accent);
 }
@@ -941,7 +942,7 @@ button.link {
 }
 
 .step-dot.active {
-  background: rgba(110, 246, 255, 0.12);
+  background: rgba(59, 130, 246, 0.12);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -1001,7 +1002,7 @@ button.link {
 
 .upload-btn:hover {
   border-color: var(--accent);
-  background: rgba(110, 246, 255, 0.06);
+  background: rgba(59, 130, 246, 0.06);
 }
 
 .upload-title {
@@ -1181,7 +1182,7 @@ button.link {
 .upload-chip:hover {
   border-color: var(--accent);
   color: var(--text);
-  background: rgba(110, 246, 255, 0.06);
+  background: rgba(59, 130, 246, 0.06);
 }
 
 .upload-hint {
@@ -1225,6 +1226,119 @@ button.link {
 #capture-steps[hidden],
 #upload-back-label[hidden] {
   display: none;
+}
+
+.loading-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+  max-width: 320px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.loading-hint.loading-warn {
+  color: var(--warning);
+}
+
+.capture-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px auto 0;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 189, 89, 0.35);
+  background: rgba(255, 189, 89, 0.08);
+  color: var(--warning);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  max-width: 480px;
+  text-align: left;
+}
+
+/* ── Upload crop editor ──────────────────────────────────────────────────── */
+.crop-panel {
+  width: min(420px, 92vw);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  padding: 22px;
+  box-shadow: 0 30px 80px rgba(2, 8, 20, 0.9);
+}
+
+.crop-title {
+  font-size: 1.05rem;
+  margin: 0 0 6px;
+}
+
+.crop-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.crop-stage {
+  position: relative;
+  width: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000;
+  touch-action: none;
+  cursor: grab;
+  border: 1px solid var(--border);
+}
+
+.crop-stage:active {
+  cursor: grabbing;
+}
+
+.crop-stage img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.crop-frame-edge {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--accent);
+  border-radius: 18px;
+  pointer-events: none;
+  box-shadow: 0 0 0 999px rgba(2, 6, 16, 0.45);
+}
+
+.crop-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.crop-zoom-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.crop-zoom-row input[type=range] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.crop-actions button {
+  padding: 10px 18px;
 }
 
 @media (max-width: 640px) {

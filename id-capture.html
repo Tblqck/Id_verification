@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#020814">
+  <meta name="theme-color" content="#0a0e14">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="styles/app.css">
   <title>Step 1 · ID Capture</title>
@@ -29,6 +29,7 @@
           </div>
         </div>
         <h1 id="capture-heading">Upload or scan your document</h1>
+        <p class="capture-tip">⚠ Place your document on a flat, dark surface — avoid clutter, glare, and busy backgrounds.</p>
       </header>
 
       <section class="capture-block" id="camera-block">
@@ -90,6 +91,25 @@
   <div class="scrim hidden" id="error-layer">
     <div class="loader"></div>
     <p id="error-text">Unable to reach camera.</p>
+  </div>
+
+  <div class="scrim hidden" id="crop-layer">
+    <div class="crop-panel">
+      <h2 class="crop-title">Fit your document in the frame</h2>
+      <p class="crop-hint">Drag to reposition, use the slider to zoom. Only what's inside the frame will be saved.</p>
+      <div class="crop-stage" id="crop-stage">
+        <img id="crop-img" alt="Uploaded document">
+        <div class="crop-frame-edge"></div>
+      </div>
+      <div class="crop-zoom-row">
+        <span class="crop-zoom-label">Zoom</span>
+        <input type="range" id="crop-zoom" min="0" max="100" value="0" step="1">
+      </div>
+      <div class="crop-actions">
+        <button class="ghost" id="crop-cancel">Cancel</button>
+        <button class="primary" id="crop-confirm">Use this crop</button>
+      </div>
+    </div>
   </div>
 
   <script src="scripts/countries.js"></script>

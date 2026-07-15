@@ -19,6 +19,17 @@ const DOC_RATIO = {
 const DOC_NEEDS_BACK = ['national_id', 'drivers_license', 'residence_permit'];
 function needsBack(docType) { return DOC_NEEDS_BACK.includes(docType); }
 
+const GUIDE_FILL = 0.82; // guide square fills 82% of the frame width
+
+// Guide-square rect in *source pixel* coordinates (video or canvas natural size).
+// Shared by quality measurement, the on-screen guide overlay, and the actual
+// capture crop, so what the user sees lined up is exactly what gets saved.
+function getGuideRect(sourceW, sourceH, ratio) {
+  const cardW = sourceW * GUIDE_FILL;
+  const cardH = cardW / ratio;
+  return { x: (sourceW - cardW) / 2, y: (sourceH - cardH) / 2, width: cardW, height: cardH };
+}
+
 // ── Read selection from state ─────────────────────────────────────────────────
 const stored = getState();
 if (!stored.country || !stored.docType) {
@@ -64,6 +75,12 @@ const uploadFront    = document.getElementById('upload-front');
 const uploadBack     = document.getElementById('upload-back');
 const uploadBackLabel = document.getElementById('upload-back-label');
 const uploadHint     = document.getElementById('upload-hint');
+const cropLayer      = document.getElementById('crop-layer');
+const cropStage      = document.getElementById('crop-stage');
+const cropImg        = document.getElementById('crop-img');
+const cropZoom       = document.getElementById('crop-zoom');
+const cropCancel     = document.getElementById('crop-cancel');
+const cropConfirm    = document.getElementById('crop-confirm');
 
 // ── Capture state ─────────────────────────────────────────────────────────────
 let stream             = null;
@@ -222,12 +239,10 @@ function measureQuality(docType = 'national_id') {
   const octx  = off.getContext('2d');
   octx.drawImage(video, 0, 0, off.width, off.height);
 
-  const cardW = off.width * 0.82;
-  const cardH = cardW / RATIO;
-  const gx    = (off.width  - cardW) / 2;
-  const gy    = (off.height - cardH) / 2;
-  const iw    = Math.max(1, Math.floor(cardW));
-  const ih    = Math.max(1, Math.floor(cardH));
+  const rect  = getGuideRect(off.width, off.height, RATIO);
+  const gx    = rect.x, gy = rect.y;
+  const iw    = Math.max(1, Math.floor(rect.width));
+  const ih    = Math.max(1, Math.floor(rect.height));
   const data  = octx.getImageData(Math.floor(gx), Math.floor(gy), iw, ih).data;
 
   let sum = 0, glare = 0;
@@ -293,10 +308,7 @@ function drawDocGuide(quality, docType = 'national_id') {
   const RATIO  = DOC_RATIO[docType] || 1.585;
   const cw     = overlay.width;
   const ch     = overlay.height;
-  const width  = cw * 0.82;
-  const height = width / RATIO;
-  const x      = (cw - width)  / 2;
-  const y      = (ch - height) / 2;
+  const { x, y, width, height } = getGuideRect(cw, ch, RATIO);
 
   ctx.clearRect(0, 0, cw, ch);
   ctx.save();
@@ -309,7 +321,7 @@ function drawDocGuide(quality, docType = 'national_id') {
 
   const color = quality.ready ? 'rgba(92,250,142,0.95)'
     : quality.passCount >= 2  ? 'rgba(255,189,89,0.95)'
-    : 'rgba(110,246,255,0.8)';
+    : 'rgba(59,130,246,0.8)';
 
   ctx.strokeStyle = color;
   ctx.lineWidth   = 4;
@@ -412,10 +424,17 @@ function cancelCountdown() {
 
 function captureFrame() {
   if (captured) return;
+  const RATIO = DOC_RATIO[selectedDocType] || 1.585;
+  const rect  = getGuideRect(video.videoWidth, video.videoHeight, RATIO);
   const canvas = document.createElement('canvas');
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.width  = Math.round(rect.width);
+  canvas.height = Math.round(rect.height);
+  // Save only what's inside the guide square, never the full camera frame.
+  canvas.getContext('2d').drawImage(
+    video,
+    rect.x, rect.y, rect.width, rect.height,
+    0, 0, canvas.width, canvas.height
+  );
   const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
   const q     = measureQuality(selectedDocType);
@@ -456,6 +475,126 @@ function captureFrame() {
   }
 }
 
+// ── Upload crop editor ────────────────────────────────────────────────────────
+// Uploads are never saved as-is: the user must pan/zoom the photo behind a
+// fixed guide frame first, so only the cropped document region is stored —
+// same principle as the camera capture above.
+let cropState = null; // { natW, natH, frameW, frameH, minScale, maxScale, scale, offX, offY }
+let cropResolve = null;
+
+function openCropEditor(dataUrl, ratio) {
+  return new Promise(resolve => {
+    cropResolve = resolve;
+    cropImg.src = dataUrl;
+    cropLayer.classList.remove('hidden');
+    cropStage.style.aspectRatio = `${ratio} / 1`;
+
+    cropImg.onload = () => {
+      const frameW = cropStage.clientWidth;
+      const frameH = cropStage.clientHeight;
+      const natW   = cropImg.naturalWidth;
+      const natH   = cropImg.naturalHeight;
+      const minScale = Math.max(frameW / natW, frameH / natH);
+
+      cropState = {
+        natW, natH, frameW, frameH,
+        minScale, maxScale: minScale * 3,
+        scale: minScale,
+        offX: (frameW - natW * minScale) / 2,
+        offY: (frameH - natH * minScale) / 2,
+      };
+      cropZoom.value = 0;
+      applyCropTransform();
+    };
+  });
+}
+
+function applyCropTransform() {
+  const s = cropState;
+  cropImg.style.width     = (s.natW * s.scale) + 'px';
+  cropImg.style.height    = (s.natH * s.scale) + 'px';
+  cropImg.style.transform = `translate(${s.offX}px, ${s.offY}px)`;
+}
+
+function clampCropOffsets() {
+  const s = cropState;
+  const dispW = s.natW * s.scale;
+  const dispH = s.natH * s.scale;
+  s.offX = Math.min(0, Math.max(s.frameW - dispW, s.offX));
+  s.offY = Math.min(0, Math.max(s.frameH - dispH, s.offY));
+}
+
+function closeCropEditor(result) {
+  cropLayer.classList.add('hidden');
+  cropState = null;
+  const resolve = cropResolve;
+  cropResolve = null;
+  if (resolve) resolve(result);
+}
+
+cropZoom.addEventListener('input', () => {
+  if (!cropState) return;
+  const s = cropState;
+  const t = cropZoom.value / 100;
+  const newScale = s.minScale + t * (s.maxScale - s.minScale);
+
+  // Keep the frame's visual center anchored while zooming.
+  const cx = s.frameW / 2, cy = s.frameH / 2;
+  const imgX = (cx - s.offX) / s.scale;
+  const imgY = (cy - s.offY) / s.scale;
+  s.scale = newScale;
+  s.offX = cx - imgX * s.scale;
+  s.offY = cy - imgY * s.scale;
+
+  clampCropOffsets();
+  applyCropTransform();
+});
+
+let cropDragging = false, cropDragStartX = 0, cropDragStartY = 0, cropStartOffX = 0, cropStartOffY = 0;
+
+cropStage.addEventListener('pointerdown', e => {
+  if (!cropState) return;
+  cropDragging = true;
+  cropStage.setPointerCapture(e.pointerId);
+  cropDragStartX = e.clientX; cropDragStartY = e.clientY;
+  cropStartOffX  = cropState.offX; cropStartOffY = cropState.offY;
+});
+cropStage.addEventListener('pointermove', e => {
+  if (!cropDragging || !cropState) return;
+  cropState.offX = cropStartOffX + (e.clientX - cropDragStartX);
+  cropState.offY = cropStartOffY + (e.clientY - cropDragStartY);
+  clampCropOffsets();
+  applyCropTransform();
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
+  cropStage.addEventListener(ev, () => { cropDragging = false; })
+);
+cropStage.addEventListener('wheel', e => {
+  if (!cropState) return;
+  e.preventDefault();
+  cropZoom.value = Math.min(100, Math.max(0, Number(cropZoom.value) - Math.sign(e.deltaY) * 4));
+  cropZoom.dispatchEvent(new Event('input'));
+}, { passive: false });
+
+cropCancel.addEventListener('click', () => closeCropEditor(null));
+
+cropConfirm.addEventListener('click', () => {
+  const s = cropState;
+  if (!s) return;
+
+  // Exactly what's visible inside the frame, at full source resolution.
+  const srcX = -s.offX / s.scale;
+  const srcY = -s.offY / s.scale;
+  const srcW = s.frameW / s.scale;
+  const srcH = s.frameH / s.scale;
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = 900;
+  canvas.height = Math.round(900 * (s.frameH / s.frameW));
+  canvas.getContext('2d').drawImage(cropImg, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+  closeCropEditor(canvas.toDataURL('image/jpeg', 0.92));
+});
+
 // ── Upload fallback ─────────────────────────────────────────────────────────
 async function handleUpload(file, side, inputEl) {
   if (!file) return;
@@ -473,7 +612,13 @@ async function handleUpload(file, side, inputEl) {
   }
 
   try {
-    const dataUrl = await readFileAsDataURL(file);
+    const rawDataUrl = await readFileAsDataURL(file);
+    const RATIO = DOC_RATIO[selectedDocType] || 1.585;
+    const dataUrl = await openCropEditor(rawDataUrl, RATIO);
+    if (!dataUrl) { // user cancelled the crop
+      if (inputEl) inputEl.value = '';
+      return;
+    }
     const meta = {
       side,
       docType: selectedDocType,
