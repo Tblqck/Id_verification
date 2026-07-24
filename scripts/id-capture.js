@@ -21,6 +21,15 @@ function needsBack(docType) { return DOC_NEEDS_BACK.includes(docType); }
 
 const GUIDE_FILL = 0.82; // guide square fills 82% of the frame width
 
+// Cutoff detection tuning — captureFrame() crops exactly to the guide rect,
+// so a document that overflows the guide gets literally cropped in the saved
+// image. We sample a thin band just outside each guide edge; if that band
+// looks like document (texture/brightness) rather than the flat dark
+// background the tip instructs users to use, that side is overflowing.
+const CUTOFF_BAND_FRAC       = 0.35; // fraction of the available margin used as the sample band
+const CUTOFF_MIN_BAND_PX     = 3;
+const CUTOFF_VARIANCE_THRESH = 180;  // luminance variance above this reads as "not flat background"
+
 // Guide-square rect in *source pixel* coordinates (video or canvas natural size).
 // Shared by quality measurement, the on-screen guide overlay, and the actual
 // capture crop, so what the user sees lined up is exactly what gets saved.
@@ -90,6 +99,11 @@ let countdownActive    = false;
 let captured           = false;
 let captureStep        = 'front';
 let backTransitionTimer = null;
+let readyStreak        = 0; // consecutive analyser ticks with all 4 checks passing
+
+// Analyser runs every 140ms; require this many straight "ready" ticks before
+// auto-firing the countdown, so a single lucky frame doesn't trigger capture.
+const READY_HOLD_TICKS = 4;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 badgeFlag.textContent  = countryFlag(selectedCountry.code2);
@@ -217,13 +231,30 @@ function startAnalyser() {
     const q = measureQuality(selectedDocType);
     drawDocGuide(q, selectedDocType);
     updateUI(q);
+    handleAutoCapture(q);
   }, 140);
 }
 
 function stopAnalyser() {
   clearInterval(analyser);
-  analyser = null;
+  analyser  = null;
+  readyStreak = 0;
   ctx?.clearRect(0, 0, overlay.width, overlay.height);
+}
+
+// Fires the same countdown the "Take Picture" button uses, once quality
+// holds steady for READY_HOLD_TICKS in a row. Cancels the countdown if
+// conditions break before it completes, so we never capture a bad frame
+// just because the user tapped (or auto-capture started) too early.
+function handleAutoCapture(q) {
+  if (captured) { readyStreak = 0; return; }
+  if (q.ready) {
+    readyStreak += 1;
+    if (!countdownActive && readyStreak >= READY_HOLD_TICKS) beginCountdown();
+  } else {
+    readyStreak = 0;
+    if (countdownActive) cancelCountdown();
+  }
 }
 
 // ── Quality measurement ───────────────────────────────────────────────────────
@@ -271,12 +302,14 @@ function measureQuality(docType = 'national_id') {
   const bright     = avg > 215;
   const hasGlare   = glareRatio > 0.04;
   const blurry     = sharpness < 2.7;
-  const aligned    = detectEdgeAlignment(octx, gx, gy, iw, ih);
+  const cutoff      = detectCutoff(octx, gx, gy, iw, ih, off.width, off.height);
+  const cutoffState = classifyCutoff(cutoff);
+  const aligned     = detectEdgeAlignment(octx, gx, gy, iw, ih) && !cutoff.any;
 
   const checks    = { focus: !blurry, light: !dark && !bright, glare: !hasGlare, align: aligned };
   const passCount = Object.values(checks).filter(Boolean).length;
 
-  return { ready: passCount === 4, passCount, checks, dark, bright, hasGlare, blurry, aligned,
+  return { ready: passCount === 4, passCount, checks, dark, bright, hasGlare, blurry, aligned, cutoff, cutoffState,
            metrics: { brightness: +avg.toFixed(1), glareRatio: +glareRatio.toFixed(4), sharpness: +sharpness.toFixed(3) } };
 }
 
@@ -303,6 +336,77 @@ function sampleLum(octx, x, y) {
   } catch { return 0; }
 }
 
+// Mean + variance of luminance over a pixel rect, clamped to the frame bounds.
+function sampleBandStats(octx, x, y, w, h, frameW, frameH) {
+  const bx = Math.max(0, Math.round(x));
+  const by = Math.max(0, Math.round(y));
+  const bw = Math.min(frameW - bx, Math.round(w));
+  const bh = Math.min(frameH - by, Math.round(h));
+  if (bw < 1 || bh < 1) return null;
+  const data = octx.getImageData(bx, by, bw, bh).data;
+  const n = bw * bh;
+  let sum = 0, sumSq = 0;
+  for (let i = 0; i < n; i++) {
+    const l = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+    sum += l; sumSq += l * l;
+  }
+  const mean = sum / n;
+  return { variance: sumSq / n - mean * mean, mean };
+}
+
+// Checks the thin band just outside each guide edge for document content.
+// If the document extends past the guide there, that side will be cropped
+// off when captureFrame() saves the guide rect.
+function detectCutoff(octx, gx, gy, iw, ih, frameW, frameH) {
+  const marginL = gx;
+  const marginR = frameW - (gx + iw);
+  const marginT = gy;
+  const marginB = frameH - (gy + ih);
+
+  const left   = marginL > CUTOFF_MIN_BAND_PX
+    ? sampleBandStats(octx, gx - marginL * CUTOFF_BAND_FRAC, gy, marginL * CUTOFF_BAND_FRAC, ih, frameW, frameH)
+    : null;
+  const right  = marginR > CUTOFF_MIN_BAND_PX
+    ? sampleBandStats(octx, gx + iw, gy, marginR * CUTOFF_BAND_FRAC, ih, frameW, frameH)
+    : null;
+  const top    = marginT > CUTOFF_MIN_BAND_PX
+    ? sampleBandStats(octx, gx, gy - marginT * CUTOFF_BAND_FRAC, iw, marginT * CUTOFF_BAND_FRAC, frameW, frameH)
+    : null;
+  const bottom = marginB > CUTOFF_MIN_BAND_PX
+    ? sampleBandStats(octx, gx, gy + ih, iw, marginB * CUTOFF_BAND_FRAC, frameW, frameH)
+    : null;
+
+  const cutLeft   = !!left   && left.variance   > CUTOFF_VARIANCE_THRESH;
+  const cutRight  = !!right  && right.variance  > CUTOFF_VARIANCE_THRESH;
+  const cutTop    = !!top    && top.variance    > CUTOFF_VARIANCE_THRESH;
+  const cutBottom = !!bottom && bottom.variance > CUTOFF_VARIANCE_THRESH;
+  const count     = [cutLeft, cutRight, cutTop, cutBottom].filter(Boolean).length;
+
+  return {
+    cutLeft, cutRight, cutTop, cutBottom, count,
+    any: count > 0,
+    opposite: (cutLeft && cutRight) || (cutTop && cutBottom),
+  };
+}
+
+// 'too_close' → overflowing on opposite/3+ sides, document is bigger than the guide.
+// 'off_center' → overflowing on just one or two adjacent sides, document has drifted.
+// null → nothing overflowing (may still be too small — that's the separate `aligned` check).
+function classifyCutoff(cutoff) {
+  if (!cutoff.any) return null;
+  if (cutoff.count >= 3 || cutoff.opposite) return 'too_close';
+  return 'off_center';
+}
+
+function cutoffSideLabel(cutoff) {
+  const sides = [];
+  if (cutoff.cutTop)    sides.push('top');
+  if (cutoff.cutBottom) sides.push('bottom');
+  if (cutoff.cutLeft)   sides.push('left');
+  if (cutoff.cutRight)  sides.push('right');
+  return sides.join('/');
+}
+
 // ── Canvas drawing ────────────────────────────────────────────────────────────
 function drawDocGuide(quality, docType = 'national_id') {
   const RATIO  = DOC_RATIO[docType] || 1.585;
@@ -319,8 +423,9 @@ function drawDocGuide(quality, docType = 'national_id') {
   ctx.fill();
   ctx.restore();
 
-  const color = quality.ready ? 'rgba(92,250,142,0.95)'
-    : quality.passCount >= 2  ? 'rgba(255,189,89,0.95)'
+  const color = quality.cutoffState === 'too_close' ? 'rgba(255,76,76,0.95)'
+    : quality.ready          ? 'rgba(92,250,142,0.95)'
+    : quality.passCount >= 2 ? 'rgba(255,189,89,0.95)'
     : 'rgba(59,130,246,0.8)';
 
   ctx.strokeStyle = color;
@@ -372,12 +477,18 @@ function updateUI(q) {
   togglePill(pillAlign, q.checks.align, !q.checks.align);
   progress.style.width = `${(q.passCount / 4) * 100}%`;
 
+  const alignMsg =
+    q.cutoffState === 'too_close'  ? 'Move the document back a little' :
+    q.cutoffState === 'off_center' ? `Center your document (slipping off the ${cutoffSideLabel(q.cutoff)})` :
+    q.aligned                      ? 'Document edges detected' :
+                                      'Move closer to fill the guide';
+
   qualityChecks.innerHTML = '';
   [
     { ok: q.checks.focus, msg: q.blurry   ? 'Hold steady — focus locking'  : 'Sharp focus' },
     { ok: q.checks.light, msg: q.dark     ? 'Move to brighter light'        : q.bright ? 'Too bright — find shade' : 'Good exposure' },
     { ok: q.checks.glare, msg: q.hasGlare ? 'Tilt card to reduce glare'    : 'No glare' },
-    { ok: q.checks.align, msg: q.aligned  ? 'Document edges detected'       : 'Fill the guide with your document' },
+    { ok: q.checks.align, msg: alignMsg },
   ].forEach(({ ok, msg }) => {
     const div = document.createElement('div');
     div.className   = `qcheck ${ok ? 'qcheck-ok' : 'qcheck-warn'}`;
@@ -386,13 +497,15 @@ function updateUI(q) {
   });
 
   toast.textContent =
-    q.dark     ? 'Move to brighter lighting.' :
-    q.bright   ? 'Too bright — find some shade.' :
-    q.hasGlare ? 'Tilt the card to remove glare.' :
-    q.blurry   ? 'Hold steady so focus locks.' :
-    !q.aligned ? 'Fill the guide with your document.' :
-    q.ready    ? 'Perfect — holding for capture…' :
-                 'Align your document within the guide.';
+    q.dark                         ? 'Move to brighter lighting.' :
+    q.bright                       ? 'Too bright — find some shade.' :
+    q.hasGlare                     ? 'Tilt the card to remove glare.' :
+    q.blurry                       ? 'Hold steady so focus locks.' :
+    q.cutoffState === 'too_close'  ? 'Document is too close — move it back a little.' :
+    q.cutoffState === 'off_center' ? "Your document is slipping out of frame — center it." :
+    !q.aligned                     ? 'Move the document closer to fill the guide.' :
+    q.ready                        ? 'Perfect — holding for capture…' :
+                                      'Align your document within the guide.';
 
   instr.textContent = q.ready ? 'All checks passed. Keep it steady.' : toast.textContent;
 }
