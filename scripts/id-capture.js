@@ -242,18 +242,16 @@ function stopAnalyser() {
   ctx?.clearRect(0, 0, overlay.width, overlay.height);
 }
 
-// Fires the same countdown the "Take Picture" button uses, once quality
-// holds steady for READY_HOLD_TICKS in a row. Cancels the countdown if
-// conditions break before it completes, so we never capture a bad frame
-// just because the user tapped (or auto-capture started) too early.
+// Snaps the instant quality holds steady for READY_HOLD_TICKS in a row —
+// no 3-2-1 countdown, just a brief hold to avoid firing on a single lucky
+// frame.
 function handleAutoCapture(q) {
   if (captured) { readyStreak = 0; return; }
   if (q.ready) {
     readyStreak += 1;
-    if (!countdownActive && readyStreak >= READY_HOLD_TICKS) beginCountdown();
+    if (readyStreak >= READY_HOLD_TICKS) captureFrame();
   } else {
     readyStreak = 0;
-    if (countdownActive) cancelCountdown();
   }
 }
 
