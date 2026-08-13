@@ -223,6 +223,24 @@ def notify_telegram_result(result: dict):
     })
 
 
+def notify_telegram_failure(reason: str):
+    """The browser already got its 200 {"processing"} response before this
+    thread even started (see _handle_verify) — the applicant has moved on
+    believing it worked. If the forward below fails, a print() to Render's
+    ephemeral stdout is otherwise the ONLY trace; nothing retries and
+    nothing else surfaces it. This is the failure-path twin of
+    notify_telegram_result — same channel ops already watches for results,
+    so a dropped submission doesn't just vanish."""
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT:
+        return
+    _tg('sendMessage', json={
+        'chat_id':    TELEGRAM_CHAT,
+        'text':       f'⚠️ *KYC Verify forward failed*\n`{_md_escape(reason)}`\n'
+                      f'The applicant\'s browser already showed "processing" — this submission needs manual follow-up.',
+        'parse_mode': 'Markdown',
+    })
+
+
 def _forward_verify(raw: bytes, content_type: str, session_token: str = ''):
     """Runs in a background thread — the browser has already moved on."""
     try:
@@ -243,10 +261,23 @@ def _forward_verify(raw: bytes, content_type: str, session_token: str = ''):
             result = resp.json()
         except Exception:
             print(f'  [VERIFY] non-JSON response, status {resp.status_code}')
+            notify_telegram_failure(f'EC2 returned a non-JSON response (status {resp.status_code})')
             return
+
+        # A JSON body doesn't mean success — EC2 returns JSON error bodies
+        # too (expired/used token -> 403, pipeline busy -> 503, etc). Both
+        # of those previously fell through to notify_telegram_result(),
+        # which silently reported a "verdict" that was actually an error
+        # payload with no overall_verdict/score in it.
+        if not resp.ok or result.get('ok') is False:
+            print(f'  [VERIFY ERR] EC2 rejected submission, status {resp.status_code}: {result}')
+            notify_telegram_failure(f'EC2 rejected submission (status {resp.status_code}): {result.get("error", result)}')
+            return
+
         notify_telegram_result(result)
     except Exception as exc:
         print(f'  [VERIFY ERR] {exc}')
+        notify_telegram_failure(str(exc))
 
 
 # ── Request handler ──────────────────────────────────────────────────────────
