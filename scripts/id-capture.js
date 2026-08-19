@@ -58,6 +58,12 @@ const stepFront      = document.getElementById('step-front');
 const stepBack       = document.getElementById('step-back');
 const frameBox       = document.getElementById('frame-id');
 const cameraBlock    = document.getElementById('camera-block');
+const qualityPanel   = document.getElementById('quality-panel');
+const readyGate      = document.getElementById('ready-gate');
+const readyTitle     = document.getElementById('ready-gate-title');
+const readyHint      = document.getElementById('ready-gate-hint');
+const readyBtn       = document.getElementById('ready-btn');
+const readyUploadBtn = document.getElementById('ready-upload-btn');
 const video          = document.getElementById('vid-id');
 const overlay        = document.getElementById('overlay-id');
 const ctx            = overlay.getContext('2d');
@@ -91,6 +97,13 @@ const cropZoom       = document.getElementById('crop-zoom');
 const cropCancel     = document.getElementById('crop-cancel');
 const cropConfirm    = document.getElementById('crop-confirm');
 
+// Mobile gets a mandatory "I'm ready" tap before the camera opens and
+// auto-capture starts trying — on a small screen there's no room to browse
+// while quality checks are already firing, and the desktop layout (side by
+// side, plenty of vertical space) doesn't have this problem, so it keeps
+// auto-starting the camera like before.
+const isMobile = window.matchMedia('(max-width: 640px)').matches;
+
 // ── Capture state ─────────────────────────────────────────────────────────────
 let stream             = null;
 let analyser           = null;
@@ -100,6 +113,7 @@ let captured           = false;
 let captureStep        = 'front';
 let awaitingBackStart  = false; // front captured, waiting for the user to confirm they've flipped the document
 let readyStreak        = 0; // consecutive analyser ticks with all 4 checks passing
+let pendingReadySide   = null; // mobile only: 'front' | 'back' — which side the ready-gate tap should start
 
 // Analyser runs every 140ms; require this many straight "ready" ticks before
 // auto-firing the countdown, so a single lucky frame doesn't trigger capture.
@@ -135,7 +149,13 @@ retakeBtn.addEventListener('click', () => {
   retakeBtn.disabled     = true;
   captured               = false;
   updateStepUI();
-  startCamera();
+  if (isMobile) {
+    stopCamera();
+    showReadyGate('front');
+  } else {
+    hideReadyGate();
+    startCamera();
+  }
 });
 
 takeBtn.addEventListener('click', () => {
@@ -143,6 +163,40 @@ takeBtn.addEventListener('click', () => {
   if (countdownActive || captured) return;
   beginCountdown();
 });
+
+readyBtn.addEventListener('click', () => {
+  const side = pendingReadySide;
+  hideReadyGate();
+  if (side === 'back') beginBackCapture();
+  else startCamera();
+});
+
+// The upload fallback stays reachable straight from the ready-gate — it
+// doesn't touch the camera at all, so there's no reason to make someone
+// tap "Start Scanning" first just to upload a photo instead.
+readyUploadBtn.addEventListener('click', () => {
+  (pendingReadySide === 'back' ? uploadBack : uploadFront)?.click();
+});
+
+// Mobile only: replaces the camera/quality panel with a static "confirm
+// you're ready" card so the camera never opens — and auto-capture never
+// starts trying — until the user explicitly taps in.
+function showReadyGate(side) {
+  pendingReadySide     = side;
+  readyTitle.textContent = side === 'back' ? 'Flip your document over' : 'Get your document ready';
+  readyHint.textContent  = side === 'back'
+    ? "Have the back facing the camera, flat and well lit. Tap when you're set."
+    : "Have it flat, well lit, and free of glare. Tap below when you're set.";
+  readyGate.hidden     = false;
+  frameBox.hidden      = true;
+  qualityPanel.hidden  = true;
+}
+
+function hideReadyGate() {
+  readyGate.hidden     = true;
+  frameBox.hidden      = false;
+  qualityPanel.hidden  = false;
+}
 
 if (uploadFront) {
   uploadFront.addEventListener('change', e => handleUpload(e.target.files?.[0], 'front', uploadFront));
@@ -165,6 +219,8 @@ if (stored.idFrame) {
   continueBtn.disabled = false;
   retakeBtn.disabled   = false;
   captured             = true;
+} else if (isMobile) {
+  showReadyGate('front');
 } else {
   startCamera();
 }
@@ -204,8 +260,15 @@ function stopCamera() {
 // same steady frame could pass quality checks again and get saved as
 // "back" — effectively capturing the front twice. Instead we wait here
 // until the user confirms (taps the button) that they've actually flipped
-// the document over.
+// the document over. On mobile that means dropping back to the same
+// ready-gate the front side used — camera fully off — rather than leaving
+// the stream running behind the button, matching the single-view flow.
 function enterBackCapture() {
+  if (isMobile) {
+    stopCamera();
+    showReadyGate('back');
+    return;
+  }
   awaitingBackStart   = true;
   takeBtn.textContent = 'Ready — Scan Back';
   takeBtn.hidden      = false;
@@ -753,6 +816,7 @@ async function handleUpload(file, side, inputEl) {
 
     captured       = true;
     takeBtn.hidden = true;
+    readyGate.hidden = true; // dismiss the ready-gate if the upload came from there
     stopCamera();
 
     if (side === 'front') {

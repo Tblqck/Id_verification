@@ -33,6 +33,14 @@
       </header>
 
       <section class="capture-block" id="camera-block">
+        <div class="capture-frame ready-gate" id="ready-gate" hidden>
+          <div class="ready-gate-inner">
+            <p class="ready-gate-title" id="ready-gate-title">Get your document ready</p>
+            <p class="ready-gate-hint" id="ready-gate-hint">Have it flat, well lit, and free of glare. Tap below when you're set.</p>
+            <button class="primary" id="ready-btn">I'm Ready — Start Scanning</button>
+            <button class="ghost ready-upload-btn" id="ready-upload-btn">or upload a photo instead</button>
+          </div>
+        </div>
         <div class="capture-frame" id="frame-id">
           <video id="vid-id" autoplay playsinline muted></video>
           <canvas id="overlay-id"></canvas>

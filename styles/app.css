@@ -921,6 +921,63 @@ button.link {
   width: 100%;
 }
 
+/* ── Pre-capture "ready" gate — shown instead of the live camera until the
+   user confirms they're set, so auto-capture never starts on its own. ── */
+.ready-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.ready-gate-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 320px;
+  text-align: center;
+}
+
+.ready-gate-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.ready-gate-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.ready-gate[hidden] {
+  display: none;
+}
+
+/* .challenge-panel sets display:flex unconditionally, which (being an
+   author rule) outranks the UA stylesheet's [hidden]{display:none} — so
+   toggling the hidden attribute alone silently did nothing here. */
+#quality-panel[hidden] {
+  display: none;
+}
+
+.ready-upload-btn {
+  border: none;
+  background: none;
+  padding: 4px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.ready-upload-btn:hover {
+  color: var(--text);
+}
+
 /* ── Capture step indicator ─────────────────────────────────────────────── */
 .capture-steps {
   display: flex;
@@ -1102,7 +1159,7 @@ button.link {
 }
 
 /* ── ID capture: compact single-screen layout ────────────────────────────── */
-.id-page .page { padding-top: 28px; }
+.id-page.page { padding-top: 28px; }
 
 .id-page .shell {
   gap: 16px;
@@ -1342,5 +1399,82 @@ button.link {
 }
 
 @media (max-width: 640px) {
-  .id-page .page { padding-top: 20px; }
+  /* Single-view mobile layout: the whole capture flow must fit in one
+     screen with no scrolling. The page becomes a fixed-height flex column;
+     the capture frame (or the ready-gate that replaces it before the user
+     confirms) is the only flexible row, so it absorbs whatever space is
+     left after everything else claims its natural height. */
+  .id-page.page {
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    padding: 10px 12px;
+    overflow: hidden;
+    align-items: stretch;
+    display: flex;
+  }
+
+  .id-page .shell {
+    height: 100%;
+    min-height: 0;
+    gap: 8px;
+  }
+
+  .id-page .capture-breadcrumb { margin-bottom: 6px; }
+
+  .id-page .hero h1 {
+    font-size: 1.05rem;
+    margin: 4px 0 6px;
+  }
+
+  .id-page .capture-tip {
+    margin: 0 auto;
+    padding: 6px 10px;
+    font-size: 0.7rem;
+    line-height: 1.3;
+  }
+
+  .id-page .capture-block {
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 8px;
+  }
+
+  .id-page .capture-frame,
+  .id-page .ready-gate {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    aspect-ratio: auto;
+  }
+
+  .id-page .ready-gate { padding: 12px; }
+  .id-page .ready-gate-title { font-size: 1rem; }
+  .id-page .ready-gate-hint { font-size: 0.78rem; }
+
+  .id-page .challenge-panel.compact-panel {
+    flex-shrink: 0;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .id-page .status-pills { gap: 6px; }
+  .id-page .pill { padding: 5px 10px; font-size: 0.72rem; }
+  .id-page .quality-checks { gap: 4px; }
+  .id-page .qcheck { font-size: 0.7rem; padding: 4px 6px; }
+  .id-page .take-btn { margin-top: 0; padding: 10px; font-size: 0.9rem; }
+
+  .id-page .upload-inline { padding-top: 6px; gap: 6px; }
+  .id-page .upload-inline-label,
+  .id-page .upload-hint,
+  .id-page .upload-chip { font-size: 0.68rem; }
+
+  .id-page .preview-row { flex-shrink: 0; padding: 10px 12px; }
+  .id-page .preview-image-wrap img { width: 84px; }
+
+  /* Continue/Retake stay out of the way until there's actually a captured
+     side to act on — both buttons are disabled until then, so hide the
+     whole row rather than reserving space for it up front. */
+  .id-page .actions { display: none; flex-shrink: 0; margin-top: 4px; }
+  .id-page .actions:has(button:enabled) { display: flex; }
 }
