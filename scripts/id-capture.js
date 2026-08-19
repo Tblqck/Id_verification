@@ -98,7 +98,7 @@ let countdownTimer     = null;
 let countdownActive    = false;
 let captured           = false;
 let captureStep        = 'front';
-let backTransitionTimer = null;
+let awaitingBackStart  = false; // front captured, waiting for the user to confirm they've flipped the document
 let readyStreak        = 0; // consecutive analyser ticks with all 4 checks passing
 
 // Analyser runs every 140ms; require this many straight "ready" ticks before
@@ -125,10 +125,12 @@ continueBtn.addEventListener('click', () => {
 retakeBtn.addEventListener('click', () => {
   dropIDFrame();
   captureStep            = 'front';
+  awaitingBackStart      = false;
   previewRow.hidden      = true;
   backPreviewWrap.hidden = true;
   cameraBlock.hidden     = false;
   takeBtn.hidden         = false;
+  takeBtn.textContent    = 'Capture Now';
   continueBtn.disabled   = true;
   retakeBtn.disabled     = true;
   captured               = false;
@@ -137,6 +139,7 @@ retakeBtn.addEventListener('click', () => {
 });
 
 takeBtn.addEventListener('click', () => {
+  if (awaitingBackStart) { beginBackCapture(); return; }
   if (countdownActive || captured) return;
   beginCountdown();
 });
@@ -194,29 +197,35 @@ function stopCamera() {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   stopAnalyser();
   cancelCountdown();
-  clearTimeout(backTransitionTimer);
-  backTransitionTimer = null;
 }
 
-// Front side is done — move straight to the back side, no extra tap needed.
-// If the camera is already running we keep the stream alive and just reset
-// the quality check for the new side; otherwise (e.g. front came from an
-// upload) we try to start it fresh.
+// Front side is done. We do NOT auto-start the back analyser: the document
+// is still sitting in the guide front-up, so if it fired immediately the
+// same steady frame could pass quality checks again and get saved as
+// "back" — effectively capturing the front twice. Instead we wait here
+// until the user confirms (taps the button) that they've actually flipped
+// the document over.
 function enterBackCapture() {
-  clearTimeout(backTransitionTimer);
-  toast.textContent = 'Front saved — flip your document…';
-  backTransitionTimer = setTimeout(() => {
-    captureStep    = 'back';
-    captured       = false;
-    takeBtn.hidden = false;
-    updateStepUI();
-    if (stream) {
-      toast.textContent = 'Align the back side within the guide.';
-      startAnalyser();
-    } else {
-      startCamera();
-    }
-  }, 900);
+  awaitingBackStart   = true;
+  takeBtn.textContent = 'Ready — Scan Back';
+  takeBtn.hidden      = false;
+  toast.textContent   = 'Flip your document over, then tap "Ready — Scan Back".';
+  instr.textContent   = 'Flip your document over, then tap "Ready — Scan Back" when it\'s in place.';
+}
+
+function beginBackCapture() {
+  awaitingBackStart   = false;
+  takeBtn.textContent = 'Capture Now';
+  captureStep         = 'back';
+  captured            = false;
+  takeBtn.hidden      = false;
+  updateStepUI();
+  if (stream) {
+    toast.textContent = 'Align the back side within the guide.';
+    startAnalyser();
+  } else {
+    startCamera();
+  }
 }
 
 function resizeCanvas() {
