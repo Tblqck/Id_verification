@@ -114,5 +114,10 @@
 
   <script src="scripts/countries.js"></script>
   <script type="module" src="scripts/id-capture.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
 </body>
 </html>
