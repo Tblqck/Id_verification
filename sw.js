@@ -1,4 +1,4 @@
-const CACHE = 'kyc-v6';
+const CACHE = 'kyc-v7';
 const PRECACHE = [
   '/',
   '/index.html',
@@ -9,6 +9,7 @@ const PRECACHE = [
   '/scripts/state.js',
   '/scripts/id.js',
   '/scripts/countries.js',
+  '/scripts/qrcode.js',
   '/scripts/pipeline.js',
   '/scripts/liveness.js',
   '/scripts/handoff.js',

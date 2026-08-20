@@ -49,6 +49,104 @@ if (!_status.valid) {
   throw new Error(`Session token not live (${_status.reason}) — blocking entry.`);
 }
 
+// ── Desktop-without-a-camera handoff ─────────────────────────────────────
+// Runs right here, immediately after the link itself is confirmed valid
+// (never before — a dead/expired link should never trigger a camera check
+// or a QR code) and before any capture UI renders. A phone opening the
+// link directly always has a camera, so this only ever applies to a
+// desktop/laptop; a device that arrived here BY scanning the QR (?via=qr)
+// is by definition already the phone continuing the session, so it skips
+// the check entirely too.
+const _via = new URLSearchParams(window.location.search).get('via');
+
+function isMobileDevice() {
+  if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
+    return navigator.userAgentData.mobile;
+  }
+  return /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent);
+}
+
+function reportHandoff(event) {
+  fetch('/session-handoff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: _token, event }),
+  }).catch(() => {});
+}
+
+// enumerateDevices() reports device kind/count without requiring camera
+// permission first — deliberately not calling getUserMedia() here, which
+// would pop a permission prompt before the applicant has even picked a
+// country/document type. Any failure fails OPEN (assumes a camera exists)
+// so a detection glitch never blocks a desktop user who actually has one.
+async function hasCamera() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.some(d => d.kind === 'videoinput');
+  } catch {
+    return true;
+  }
+}
+
+const handoffPanel  = document.getElementById('handoff-panel');
+const selectBlock   = document.getElementById('select-block');
+const actionsBlock  = document.querySelector('.actions');
+const handoffQrBox  = document.getElementById('handoff-qr');
+const handoffStatus = document.getElementById('handoff-status');
+const handoffRetry  = document.getElementById('handoff-retry-btn');
+let   _handoffPoll  = null;
+
+function showHandoffPanel() {
+  handoffPanel.classList.remove('hidden');
+  selectBlock.hidden  = true;
+  actionsBlock.hidden = true;
+
+  handoffQrBox.innerHTML = '';
+  const qrUrl = `${window.location.origin}/index.html?token=${encodeURIComponent(_token)}&via=qr`;
+  new window.QRCode(handoffQrBox, {
+    text: qrUrl, width: 200, height: 200,
+    colorDark: '#0a0e14', colorLight: '#ffffff',
+  });
+
+  reportHandoff('qr_shown');
+
+  // Poll the same read-only /session-status the page already trusts, just
+  // to flip the status line once the phone picks it up — purely cosmetic,
+  // the desktop session itself doesn't need to do anything further.
+  clearInterval(_handoffPoll);
+  _handoffPoll = setInterval(async () => {
+    const status = await fetch(`/session-status?token=${encodeURIComponent(_token)}`)
+      .then(r => r.json()).catch(() => null);
+    if (status && status.mobile_handoff_completed) {
+      handoffStatus.textContent = 'Continued on your phone ✓';
+      handoffStatus.classList.add('handoff-done');
+      clearInterval(_handoffPoll);
+    }
+  }, 4000);
+}
+
+function hideHandoffPanel() {
+  clearInterval(_handoffPoll);
+  handoffPanel.classList.add('hidden');
+  selectBlock.hidden  = false;
+  actionsBlock.hidden = false;
+}
+
+if (_via === 'qr') {
+  reportHandoff('mobile_continued');
+} else if (!isMobileDevice() && !(await hasCamera())) {
+  showHandoffPanel();
+}
+
+handoffRetry.addEventListener('click', async () => {
+  if (await hasCamera()) {
+    hideHandoffPanel();
+  } else {
+    handoffStatus.textContent = 'Still no camera found — scan the code with your phone, or connect a webcam and try again.';
+    handoffStatus.classList.remove('handoff-done');
+  }
+});
+
 const COUNTRIES   = window.COUNTRIES   || [];
 const countryFlag = window.countryFlag || (() => '');
 

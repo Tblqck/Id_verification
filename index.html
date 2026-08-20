@@ -21,7 +21,20 @@
         <p class="lede">Select the issuing country and the type of identity document you are scanning.</p>
       </header>
 
-      <div class="select-block">
+      <section class="handoff-panel hidden" id="handoff-panel">
+        <div class="handoff-card">
+          <h2>No camera detected</h2>
+          <p class="handoff-hint">This computer doesn't have a camera available, so document and selfie capture
+            can't happen here. Scan this code with your phone to continue the same verification there instead.</p>
+          <div class="handoff-qr-wrap">
+            <div id="handoff-qr"></div>
+          </div>
+          <p class="handoff-status" id="handoff-status">Waiting for your phone…</p>
+          <button class="ghost" id="handoff-retry-btn">I have a camera — continue here</button>
+        </div>
+      </section>
+
+      <div class="select-block" id="select-block">
 
         <div class="select-section">
           <p class="select-label">Country of issue</p>
@@ -78,6 +91,7 @@
   </div>
 
   <script src="scripts/countries.js"></script>
+  <script src="scripts/qrcode.js"></script>
   <script type="module" src="scripts/id.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
