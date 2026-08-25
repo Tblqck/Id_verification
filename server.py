@@ -575,7 +575,11 @@ if __name__ == '__main__':
     # ThreadingHTTPServer, not plain HTTPServer — /session-status blocks on a
     # synchronous EC2 round-trip (up to 15s); a single-threaded server would
     # stall every other visitor's request for that whole window.
-    server = http.server.ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
+    #
+    # Loopback only: nginx terminates TLS for kyc.idntory.com and proxies to
+    # 127.0.0.1:5000. Binding 0.0.0.0 additionally exposed this port directly
+    # on the public interface, plaintext and unproxied.
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
