@@ -1484,7 +1484,10 @@ body.handoff-mode #handoff-retry-btn {
   position: absolute;
   left: 0;
   top: 0;
-  transform-origin: 0 0;
+  /* Center, not the default top-left-box value — rotation needs to pivot
+     the image in place, not swing it around its top-left corner. This is
+     also what the zoom/pan/rotate math in id-capture.js assumes. */
+  transform-origin: 50% 50%;
   user-select: none;
   -webkit-user-drag: none;
   pointer-events: none;
@@ -1514,6 +1517,14 @@ body.handoff-mode #handoff-retry-btn {
 .crop-zoom-row input[type=range] {
   flex: 1;
   accent-color: var(--accent);
+}
+
+.crop-rotate-value {
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .crop-actions {

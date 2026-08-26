@@ -94,6 +94,8 @@ const cropLayer      = document.getElementById('crop-layer');
 const cropStage      = document.getElementById('crop-stage');
 const cropImg        = document.getElementById('crop-img');
 const cropZoom       = document.getElementById('crop-zoom');
+const cropRotate     = document.getElementById('crop-rotate');
+const cropRotateVal  = document.getElementById('crop-rotate-value');
 const cropCancel     = document.getElementById('crop-cancel');
 const cropConfirm    = document.getElementById('crop-confirm');
 
@@ -659,11 +661,48 @@ function captureFrame() {
 }
 
 // ── Upload crop editor ────────────────────────────────────────────────────────
-// Uploads are never saved as-is: the user must pan/zoom the photo behind a
-// fixed guide frame first, so only the cropped document region is stored —
-// same principle as the camera capture above.
-let cropState = null; // { natW, natH, frameW, frameH, minScale, maxScale, scale, offX, offY }
+// Uploads are never saved as-is: the user must pan/zoom/straighten the photo
+// behind a fixed guide frame first, so only the cropped document region is
+// stored — same principle as the camera capture above.
+//
+// The image's on-screen transform is `translate(offX, offY) rotate(angle)`
+// with transform-origin at the image's own center (see app.css) — CSS
+// composes that as: rotate the image about its own center, then shift the
+// whole result by (offX, offY). Net effect: the image's own center always
+// sits at frame-space point C = (offX + dispW/2, offY + dispH/2), completely
+// independent of angle, which is what makes the rest of this tractable —
+// panning is a plain translate regardless of rotation, and "keep this point
+// anchored" math only has to reason about one rotation, not a moving pivot.
+let cropState = null; // { natW, natH, frameW, frameH, angle, scale, offX, offY }
 let cropResolve = null;
+
+function rotVec(x, y, deg) {
+  const r = deg * Math.PI / 180;
+  const c = Math.cos(r), s = Math.sin(r);
+  return { x: x * c - y * s, y: x * s + y * c };
+}
+
+function cropCenter(s) {
+  return { x: s.offX + s.natW * s.scale / 2, y: s.offY + s.natH * s.scale / 2 };
+}
+
+function setCropCenter(s, cx, cy) {
+  s.offX = cx - s.natW * s.scale / 2;
+  s.offY = cy - s.natH * s.scale / 2;
+}
+
+// Minimum scale for the (unrotated) image to still fully cover the frame
+// once rotated by `angleDeg` — i.e. the frame's own corners, expressed in
+// the image's local unrotated coordinates, must fit inside it. That's the
+// standard "bounding box of a rotated rectangle" size, computed in the
+// image's frame instead of the screen's.
+function minScaleForAngle(s, angleDeg) {
+  const r = Math.abs(angleDeg) * Math.PI / 180;
+  const c = Math.abs(Math.cos(r)), sn = Math.abs(Math.sin(r));
+  const wPrime = s.frameW * c + s.frameH * sn;
+  const hPrime = s.frameW * sn + s.frameH * c;
+  return Math.max(wPrime / s.natW, hPrime / s.natH);
+}
 
 function openCropEditor(dataUrl, ratio) {
   return new Promise(resolve => {
@@ -677,16 +716,14 @@ function openCropEditor(dataUrl, ratio) {
       const frameH = cropStage.clientHeight;
       const natW   = cropImg.naturalWidth;
       const natH   = cropImg.naturalHeight;
-      const minScale = Math.max(frameW / natW, frameH / natH);
 
-      cropState = {
-        natW, natH, frameW, frameH,
-        minScale, maxScale: minScale * 3,
-        scale: minScale,
-        offX: (frameW - natW * minScale) / 2,
-        offY: (frameH - natH * minScale) / 2,
-      };
+      cropState = { natW, natH, frameW, frameH, angle: 0, scale: 0 };
+      cropState.scale = minScaleForAngle(cropState, 0);
+      setCropCenter(cropState, frameW / 2, frameH / 2);
+
       cropZoom.value = 0;
+      cropRotate.value = 0;
+      cropRotateVal.textContent = '0°';
       applyCropTransform();
     };
   });
@@ -696,15 +733,30 @@ function applyCropTransform() {
   const s = cropState;
   cropImg.style.width     = (s.natW * s.scale) + 'px';
   cropImg.style.height    = (s.natH * s.scale) + 'px';
-  cropImg.style.transform = `translate(${s.offX}px, ${s.offY}px)`;
+  cropImg.style.transform = `translate(${s.offX}px, ${s.offY}px) rotate(${s.angle}deg)`;
 }
 
-function clampCropOffsets() {
-  const s = cropState;
-  const dispW = s.natW * s.scale;
-  const dispH = s.natH * s.scale;
-  s.offX = Math.min(0, Math.max(s.frameW - dispW, s.offX));
-  s.offY = Math.min(0, Math.max(s.frameH - dispH, s.offY));
+// Clamps so the frame stays fully covered at the current angle/scale.
+// Reasoned in the image's own (unrotated) local coordinates, where the
+// constraint is a plain axis-aligned box — see the module comment above for
+// why that's valid. Converts the frame-space center back and forth around
+// that local-space clamp.
+function clampCropState(s) {
+  const dispW = s.natW * s.scale, dispH = s.natH * s.scale;
+  const C = cropCenter(s);
+  const D = rotVec(C.x, C.y, -s.angle);
+
+  const corners = [
+    { x: 0, y: 0 }, { x: s.frameW, y: 0 }, { x: 0, y: s.frameH }, { x: s.frameW, y: s.frameH },
+  ].map(p => rotVec(p.x, p.y, -s.angle));
+  const wMax = Math.max(...corners.map(p => p.x)), wMin = Math.min(...corners.map(p => p.x));
+  const hMax = Math.max(...corners.map(p => p.y)), hMin = Math.min(...corners.map(p => p.y));
+
+  D.x = Math.min(wMin + dispW / 2, Math.max(wMax - dispW / 2, D.x));
+  D.y = Math.min(hMin + dispH / 2, Math.max(hMax - dispH / 2, D.y));
+
+  const Cnew = rotVec(D.x, D.y, s.angle);
+  setCropCenter(s, Cnew.x, Cnew.y);
 }
 
 function closeCropEditor(result) {
@@ -715,21 +767,60 @@ function closeCropEditor(result) {
   if (resolve) resolve(result);
 }
 
+// Shared by the zoom and rotate handlers: whatever natural-image point is
+// currently sitting under the frame's visual center stays there through the
+// change, same "zoom toward what you're looking at" feel as before, now
+// rotation-aware too.
+function anchoredPointUnderFrameCenter(s) {
+  const C = cropCenter(s);
+  const frameCenter = { x: s.frameW / 2, y: s.frameH / 2 };
+  const local = rotVec(frameCenter.x - C.x, frameCenter.y - C.y, -s.angle);
+  return { x: local.x / s.scale, y: local.y / s.scale };
+}
+
+function recenterOnAnchor(s, natPt) {
+  const frameCenter = { x: s.frameW / 2, y: s.frameH / 2 };
+  const local = { x: natPt.x * s.scale, y: natPt.y * s.scale };
+  const rel = rotVec(local.x, local.y, s.angle);
+  setCropCenter(s, frameCenter.x - rel.x, frameCenter.y - rel.y);
+}
+
 cropZoom.addEventListener('input', () => {
   if (!cropState) return;
   const s = cropState;
   const t = cropZoom.value / 100;
-  const newScale = s.minScale + t * (s.maxScale - s.minScale);
+  const minS = minScaleForAngle(s, s.angle);
+  const maxS = minS * 3;
 
-  // Keep the frame's visual center anchored while zooming.
-  const cx = s.frameW / 2, cy = s.frameH / 2;
-  const imgX = (cx - s.offX) / s.scale;
-  const imgY = (cy - s.offY) / s.scale;
-  s.scale = newScale;
-  s.offX = cx - imgX * s.scale;
-  s.offY = cy - imgY * s.scale;
+  const natPt = anchoredPointUnderFrameCenter(s);
+  s.scale = minS + t * (maxS - minS);
+  recenterOnAnchor(s, natPt);
 
-  clampCropOffsets();
+  clampCropState(s);
+  applyCropTransform();
+});
+
+cropRotate.addEventListener('input', () => {
+  if (!cropState) return;
+  const s = cropState;
+  const newAngle = Number(cropRotate.value);
+
+  const natPt = anchoredPointUnderFrameCenter(s);
+  const minS  = minScaleForAngle(s, newAngle);
+  // Rotating can require more coverage than the current zoom level gives —
+  // auto zoom in just enough to keep the frame covered, same as pinch-zoom
+  // apps do when you rotate a photo.
+  if (s.scale < minS) s.scale = minS;
+  s.angle = newAngle;
+  recenterOnAnchor(s, natPt);
+
+  // Reflect any auto zoom-in back onto the zoom slider so it doesn't silently
+  // drift out of sync with what's actually on screen.
+  const maxS = minS * 3;
+  cropZoom.value = Math.round(((s.scale - minS) / (maxS - minS)) * 100);
+  cropRotateVal.textContent = `${newAngle.toFixed(0)}°`;
+
+  clampCropState(s);
   applyCropTransform();
 });
 
@@ -744,9 +835,12 @@ cropStage.addEventListener('pointerdown', e => {
 });
 cropStage.addEventListener('pointermove', e => {
   if (!cropDragging || !cropState) return;
+  // A screen-space drag translates the whole rotated image by the same
+  // delta regardless of angle — rotation only affects the clamp below, not
+  // this part. See the module comment above.
   cropState.offX = cropStartOffX + (e.clientX - cropDragStartX);
   cropState.offY = cropStartOffY + (e.clientY - cropDragStartY);
-  clampCropOffsets();
+  clampCropState(cropState);
   applyCropTransform();
 });
 ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
@@ -765,16 +859,25 @@ cropConfirm.addEventListener('click', () => {
   const s = cropState;
   if (!s) return;
 
-  // Exactly what's visible inside the frame, at full source resolution.
-  const srcX = -s.offX / s.scale;
-  const srcY = -s.offY / s.scale;
-  const srcW = s.frameW / s.scale;
-  const srcH = s.frameH / s.scale;
-
+  // Renders the frame rectangle exactly as shown on screen: scale frame-space
+  // units to canvas pixels, move to the image's center, rotate, draw the
+  // full (scaled) image centered on that point. Mirrors the CSS transform
+  // pixel-for-pixel instead of extracting an axis-aligned sub-rectangle,
+  // which only would have worked for angle 0.
   const canvas = document.createElement('canvas');
   canvas.width  = 900;
   canvas.height = Math.round(900 * (s.frameH / s.frameW));
-  canvas.getContext('2d').drawImage(cropImg, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+  const k = canvas.width / s.frameW;
+  const C = cropCenter(s);
+
+  const ctx = canvas.getContext('2d');
+  ctx.save();
+  ctx.scale(k, k);
+  ctx.translate(C.x, C.y);
+  ctx.rotate(s.angle * Math.PI / 180);
+  ctx.drawImage(cropImg, -s.natW * s.scale / 2, -s.natH * s.scale / 2, s.natW * s.scale, s.natH * s.scale);
+  ctx.restore();
+
   closeCropEditor(canvas.toDataURL('image/jpeg', 0.92));
 });
 
