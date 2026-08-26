@@ -1617,4 +1617,71 @@ body.handoff-mode #handoff-retry-btn {
      whole row rather than reserving space for it up front. */
   .id-page .actions { display: none; flex-shrink: 0; margin-top: 4px; }
   .id-page .actions:has(button:enabled) { display: flex; }
+
+  /* Liveness: same single-view fit as .id-page above — the portrait video
+     frame previously claimed a fixed 3:4 aspect-ratio, which pushed the
+     challenge-panel (and its per-step instruction text) below the fold on
+     a typical phone viewport. Dropping the fixed aspect-ratio and letting
+     the frame flex means it shrinks to whatever's left after the panel
+     (fixed-size, flex-shrink: 0) claims its natural height, so the
+     instructions are always on screen alongside the camera. */
+  .liveness-page.page {
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    padding: 10px 12px;
+    overflow: hidden;
+    align-items: stretch;
+    display: flex;
+  }
+
+  .liveness-page .shell {
+    height: 100%;
+    min-height: 0;
+    gap: 8px;
+  }
+
+  .liveness-page .hero {
+    flex-shrink: 0;
+  }
+
+  .liveness-page .hero h1 {
+    font-size: 1.05rem;
+    margin: 4px 0 6px;
+    line-height: 1.25;
+  }
+
+  .liveness-page .hero .lede {
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
+  .liveness-page .capture-block {
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 8px;
+  }
+
+  .liveness-page .capture-frame {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    aspect-ratio: auto;
+  }
+
+  .liveness-page .challenge-panel {
+    flex-shrink: 0;
+    padding: 12px 14px;
+    gap: 8px;
+  }
+
+  .liveness-page .challenge-panel h3 { font-size: 0.95rem; }
+  .liveness-page .challenge-panel p { font-size: 0.8rem; line-height: 1.4; }
+  .liveness-page .challenge-list { gap: 6px; }
+  .liveness-page .challenge-item { padding: 8px 12px; }
+  .liveness-page .liveness-meta { font-size: 0.72rem; }
+
+  .liveness-page .preview-row { flex-shrink: 0; padding: 10px 12px; }
+
+  .liveness-page .actions { flex-shrink: 0; margin-top: 4px; }
 }
