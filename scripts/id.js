@@ -100,6 +100,7 @@ function showHandoffPanel() {
   handoffPanel.classList.remove('hidden');
   selectBlock.hidden  = true;
   actionsBlock.hidden = true;
+  document.body.classList.add('handoff-mode');
 
   handoffQrBox.innerHTML = '';
   const qrUrl = `${window.location.origin}/index.html?token=${encodeURIComponent(_token)}&via=qr`;
@@ -130,6 +131,7 @@ function hideHandoffPanel() {
   handoffPanel.classList.add('hidden');
   selectBlock.hidden  = false;
   actionsBlock.hidden = false;
+  document.body.classList.remove('handoff-mode');
 }
 
 if (_via === 'qr') {
