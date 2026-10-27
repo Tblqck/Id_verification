@@ -1,4 +1,4 @@
-const CACHE = 'kyc-v7';
+const CACHE = 'kyc-v8';
 const PRECACHE = [
   '/',
   '/index.html',

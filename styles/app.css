@@ -1691,3 +1691,16 @@ body.handoff-mode #handoff-retry-btn {
   .liveness-page .actions { flex-shrink: 0; margin-top: 4px; }
   .liveness-page .actions button { padding: 8px; font-size: 0.85rem; }
 }
+
+/* Tap-to-enlarge for captured/uploaded ID previews */
+.id-page .preview-image-wrap img { cursor: zoom-in; }
+.img-lightbox {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(0, 0, 0, 0.88); cursor: zoom-out;
+}
+.img-lightbox[hidden] { display: none; }
+.img-lightbox img {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+  border-radius: 8px; cursor: default;
+}

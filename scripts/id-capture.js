@@ -999,3 +999,19 @@ function updateStepUI() {
 // ── Errors ────────────────────────────────────────────────────────────────────
 function showError(msg) { errorText.textContent = msg; errorLayer.classList.remove('hidden'); }
 function hideError()    { errorLayer.classList.add('hidden'); }
+
+
+// ── Tap a preview thumbnail to inspect it full size ──────────────────────
+// Click outside the enlarged image (or press Esc) to return to normal.
+const lightbox    = document.getElementById('img-lightbox');
+const lightboxImg = document.getElementById('img-lightbox-img');
+function closeLightbox() { lightbox.hidden = true; lightboxImg.removeAttribute('src'); }
+[previewImg, previewImgBack].forEach((img) => {
+  img.addEventListener('click', () => {
+    if (!img.src) return;
+    lightboxImg.src = img.src;
+    lightbox.hidden = false;
+  });
+});
+lightbox.addEventListener('click', (e) => { if (e.target !== lightboxImg) closeLightbox(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lightbox.hidden) closeLightbox(); });
