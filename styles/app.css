@@ -161,6 +161,12 @@ body::before {
   pointer-events: none;
 }
 
+/* The live camera picture is painted onto #view-id (explicit cover-crop in
+   JS) rather than trusting the <video> layer, which iOS WebKit sometimes
+   renders pillarboxed. The <video> stays underneath only as the frame source. */
+#view-id { background: #000; }
+#frame-id #vid-id { opacity: 0; }
+
 .quality-toast {
   position: absolute;
   left: 50%;
@@ -1592,10 +1598,10 @@ body.handoff-mode #handoff-retry-btn {
      (this is what left a thin black bar with nothing to see). While the
      camera is on, keep a usable viewfinder and drop the secondary rows
      (front thumbnail's quality notes, the tip banner) to make room. */
-  .id-page .capture-frame { min-height: 200px; }
-  .id-page.cam-live .quality-list-compact,
-  .id-page.cam-live .capture-tip,
-  .id-page.cam-live .quality-checks { display: none; }
+  .id-page.on-back .capture-frame { min-height: 200px; }
+  .id-page.on-back.cam-live .quality-list-compact,
+  .id-page.on-back.cam-live .capture-tip,
+  .id-page.on-back.cam-live .quality-checks { display: none; }
 
   .id-page .ready-gate { padding: 12px; }
   .id-page .ready-gate-title { font-size: 1rem; }

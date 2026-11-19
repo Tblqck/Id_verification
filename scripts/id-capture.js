@@ -64,8 +64,10 @@ const readyTitle     = document.getElementById('ready-gate-title');
 const readyHint      = document.getElementById('ready-gate-hint');
 const readyBtn       = document.getElementById('ready-btn');
 const readyUploadBtn = document.getElementById('ready-upload-btn');
-const video          = document.getElementById('vid-id');
+let   video          = document.getElementById('vid-id');
 const overlay        = document.getElementById('overlay-id');
+const viewCanvas     = document.getElementById('view-id');
+let   viewRaf        = null;
 const ctx            = overlay.getContext('2d');
 const toast          = document.getElementById('quality-toast');
 const instr          = document.getElementById('quality-instr');
@@ -239,9 +241,29 @@ if (stored.idFrame) {
 }
 
 // ── Camera ────────────────────────────────────────────────────────────────────
+// iOS Safari can render a second getUserMedia stream on a reused <video>
+// pillarboxed (uncropped, black bars) instead of honouring object-fit:cover,
+// so the back side looked different from the front. A brand-new element per
+// start gives every side the same first-use rendering path as the front.
+function freshVideoElement() {
+  const old = video;
+  old.pause();
+  old.srcObject = null;
+  const nv = document.createElement('video');
+  nv.id = 'vid-id';
+  nv.autoplay    = true;
+  nv.muted       = true;
+  nv.playsInline = true;
+  nv.setAttribute('playsinline', '');
+  nv.setAttribute('muted', '');
+  old.replaceWith(nv);
+  video = nv;
+}
+
 async function startCamera() {
   stopCamera();
   hideError();
+  freshVideoElement();
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -250,6 +272,7 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
     idPage?.classList.add('cam-live');
+    startViewfinder();
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas, { passive: true });
     toast.textContent = 'Align your document within the guide.';
@@ -263,7 +286,34 @@ async function startCamera() {
   }
 }
 
+// Paint the live video onto #view-id with an explicit cover-crop, matching
+// what the overlay canvas assumes, so front and back look identical.
+function startViewfinder() {
+  stopViewfinder();
+  const ctx = viewCanvas.getContext('2d');
+  const paint = () => {
+    if (video.readyState >= 2 && video.videoWidth) {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const tw  = Math.round(viewCanvas.clientWidth  * dpr);
+      const th  = Math.round(viewCanvas.clientHeight * dpr);
+      if (tw && th && (viewCanvas.width !== tw || viewCanvas.height !== th)) {
+        viewCanvas.width = tw; viewCanvas.height = th;
+      }
+      const s  = Math.max(viewCanvas.width / video.videoWidth, viewCanvas.height / video.videoHeight);
+      const dw = video.videoWidth * s, dh = video.videoHeight * s;
+      ctx.drawImage(video, (viewCanvas.width - dw) / 2, (viewCanvas.height - dh) / 2, dw, dh);
+    }
+    viewRaf = requestAnimationFrame(paint);
+  };
+  paint();
+}
+function stopViewfinder() {
+  if (viewRaf) cancelAnimationFrame(viewRaf);
+  viewRaf = null;
+}
+
 function stopCamera() {
+  stopViewfinder();
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   idPage?.classList.remove('cam-live');
   stopAnalyser();
@@ -999,6 +1049,7 @@ function renderBackPreview(dataUrl) {
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 function updateStepUI() {
+  idPage?.classList.toggle('on-back', captureStep === 'back');
   stepFront.classList.toggle('active', captureStep === 'front');
   stepFront.classList.toggle('done',   captureStep === 'back');
   stepBack.classList.toggle('active',  captureStep === 'back');
