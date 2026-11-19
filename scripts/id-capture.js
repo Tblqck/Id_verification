@@ -105,6 +105,7 @@ const cropConfirm    = document.getElementById('crop-confirm');
 // side, plenty of vertical space) doesn't have this problem, so it keeps
 // auto-starting the camera like before.
 const isMobile = window.matchMedia('(max-width: 640px)').matches;
+const idPage   = document.querySelector('.id-page');
 
 // ── Capture state ─────────────────────────────────────────────────────────────
 let stream             = null;
@@ -217,10 +218,20 @@ if (stored.idFrame) {
     renderBackPreview(stored.idFrameBack, stored.idMetaBack || {});
     captureStep = 'back';
     updateStepUI();
+    continueBtn.disabled = false;
+    retakeBtn.disabled   = false;
+    captured             = true;
+  } else if (needsBack(selectedDocType)) {
+    // Page reloaded (or revisited) with only the front saved: resume at the
+    // back side instead of leaving a dead camera frame with nothing to scan.
+    retakeBtn.disabled = false;
+    captured           = true;
+    enterBackCapture();
+  } else {
+    continueBtn.disabled = false;
+    retakeBtn.disabled   = false;
+    captured             = true;
   }
-  continueBtn.disabled = false;
-  retakeBtn.disabled   = false;
-  captured             = true;
 } else if (isMobile) {
   showReadyGate('front');
 } else {
@@ -238,6 +249,7 @@ async function startCamera() {
     });
     video.srcObject = stream;
     await video.play();
+    idPage?.classList.add('cam-live');
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas, { passive: true });
     toast.textContent = 'Align your document within the guide.';
@@ -253,6 +265,7 @@ async function startCamera() {
 
 function stopCamera() {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  idPage?.classList.remove('cam-live');
   stopAnalyser();
   cancelCountdown();
 }
