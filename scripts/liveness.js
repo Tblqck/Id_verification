@@ -27,12 +27,18 @@ const doneLayer        = document.getElementById('done-layer');
   } catch (_) {}
 }());
 
-const CHALLENGES = [
+// Default order, used only when the link's server challenge can't be read.
+// The real order comes from /session-status (see loadServerChallenge): the
+// server picks it per link and checks the uploaded frames against it, so
+// this page passing its own check proves nothing on its own.
+let CHALLENGES = [
   { type: 'center',     label: 'Center your face'       },
   { type: 'turn_left',  label: 'Turn head left'         },
   { type: 'center',     label: 'Center your face again' },
   { type: 'turn_right', label: 'Turn head right'        },
 ];
+
+const CHALLENGE_LABELS = { turn_left: 'Turn head left', turn_right: 'Turn head right' };
 
 const HOLD_MS  = 1400; // how long a pose must be held steady before we snap it
 const PAUSE_MS = 1100; // breather after a capture before the next prompt goes live
@@ -68,7 +74,7 @@ async function init() {
   });
 
   try {
-    await loadModel();
+    await Promise.all([loadModel(), loadServerChallenge()]);
     loadingLayer.classList.add('hidden');
     await startCamera();
   } catch (err) {
@@ -88,6 +94,28 @@ async function loadModel() {
     numFaces: 1,
     outputFaceBlendshapes: true,
   });
+}
+
+// The head-turn order for this link. Read-only — /session-status never
+// consumes the token. Retried once; on failure the default order stands.
+async function loadServerChallenge() {
+  const token = readSession().token;
+  if (!token) return;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const status = await fetch(`/session-status?token=${encodeURIComponent(token)}`).then(r => r.json());
+      const seq = status && status.challenge;
+      if (!Array.isArray(seq) || !seq.length) return;
+      if (!seq.every(t => t === 'center' || t in CHALLENGE_LABELS)) return;
+      let centres = 0;
+      CHALLENGES = seq.map(type => type === 'center'
+        ? { type, label: centres++ ? 'Center your face again' : 'Center your face' }
+        : { type, label: CHALLENGE_LABELS[type] });
+      state.challenges = CHALLENGES.map(c => ({ ...c, status: 'pending' }));
+      buildChallengeList();
+      return;
+    } catch (_) { /* retry once, then keep the default order */ }
+  }
 }
 
 async function startCamera() {
